@@ -73,85 +73,84 @@ const frameMaterial = new THREE.MeshStandardMaterial({
     metalness: 0.2
 });
 
-// A-frame swing structure - properly connected poles
-// Height of the frame
+// A-frame swing structure - properly connected poles using BufferGeometry for precise positioning
 const frameHeight = 18;
-const frameSpread = 6; // Spread at the base
-const frameDepth = 3;  // Depth front to back
+const frameSpread = 5; // Spread at the base (half-width)
+const frameDepth = 2.5;  // Depth front to back (half-depth)
+const poleRadius = 0.15;
 
-// Calculate pole positions so they meet at the top
-// Poles go from ground corners to top bar connection points
-function createPole(startX, startZ, endX, endY, endZ) {
-    const start = new THREE.Vector3(startX, 0, startZ);
-    const end = new THREE.Vector3(endX, endY, endZ);
+// Create a pole between two points using BufferGeometry for precise connection
+function createConnectedPole(start, end, radius = poleRadius) {
     const direction = new THREE.Vector3().subVectors(end, start);
     const length = direction.length();
     
-    const poleGeometry = new THREE.CylinderGeometry(0.15, 0.15, length, 12);
-    const pole = new THREE.Mesh(poleGeometry, frameMaterial);
+    // Create cylinder geometry
+    const geometry = new THREE.CylinderGeometry(radius, radius, length, 12);
     
-    // Position at midpoint
-    pole.position.set(
-        (startX + endX) / 2,
-        endY / 2,
-        (startZ + endZ) / 2
-    );
+    // By default, cylinder is centered at origin and aligned with Y axis
+    // We need to move it so one end is at origin, then position and rotate
+    geometry.translate(0, length / 2, 0);
     
-    // Rotate to align with direction
-    const axis = new THREE.Vector3(0, 1, 0);
+    const pole = new THREE.Mesh(geometry, frameMaterial);
+    
+    // Position at start point
+    pole.position.copy(start);
+    
+    // Create rotation to align Y axis with direction
+    const up = new THREE.Vector3(0, 1, 0);
     const quaternion = new THREE.Quaternion();
-    direction.normalize();
-    quaternion.setFromUnitVectors(axis, direction);
+    quaternion.setFromUnitVectors(up, direction.clone().normalize());
     pole.setRotationFromQuaternion(quaternion);
     
     pole.castShadow = true;
     return pole;
 }
 
-// Left side A-frame (front and back poles meeting at top)
-const leftFrontPole = createPole(-frameSpread, frameDepth, -0.5, frameHeight, 0);
-const leftBackPole = createPole(-frameSpread, -frameDepth, -0.5, frameHeight, 0);
+// Define apex points where poles meet at top
+const leftApex = new THREE.Vector3(-1, frameHeight, 0);
+const rightApex = new THREE.Vector3(1, frameHeight, 0);
+
+// Left A-frame - two poles meeting at left apex
+const leftFrontBase = new THREE.Vector3(-frameSpread, 0, frameDepth);
+const leftBackBase = new THREE.Vector3(-frameSpread, 0, -frameDepth);
+const leftFrontPole = createConnectedPole(leftFrontBase, leftApex);
+const leftBackPole = createConnectedPole(leftBackBase, leftApex);
 swingGroup.add(leftFrontPole);
 swingGroup.add(leftBackPole);
 
-// Right side A-frame (front and back poles meeting at top)
-const rightFrontPole = createPole(frameSpread, frameDepth, 0.5, frameHeight, 0);
-const rightBackPole = createPole(frameSpread, -frameDepth, 0.5, frameHeight, 0);
+// Right A-frame - two poles meeting at right apex
+const rightFrontBase = new THREE.Vector3(frameSpread, 0, frameDepth);
+const rightBackBase = new THREE.Vector3(frameSpread, 0, -frameDepth);
+const rightFrontPole = createConnectedPole(rightFrontBase, rightApex);
+const rightBackPole = createConnectedPole(rightBackBase, rightApex);
 swingGroup.add(rightFrontPole);
 swingGroup.add(rightBackPole);
 
-// Cross braces for stability (connecting left front/back at mid height)
-const leftBraceGeometry = new THREE.CylinderGeometry(0.08, 0.08, frameDepth * 2, 8);
-const leftBrace = new THREE.Mesh(leftBraceGeometry, frameMaterial);
-leftBrace.position.set(-frameSpread * 0.7, frameHeight * 0.3, 0);
-leftBrace.rotation.x = Math.PI / 2;
-leftBrace.castShadow = true;
+// Cross brace on left side (connecting front and back poles at mid height)
+const leftBraceFront = new THREE.Vector3().lerpVectors(leftFrontBase, leftApex, 0.35);
+const leftBraceBack = new THREE.Vector3().lerpVectors(leftBackBase, leftApex, 0.35);
+const leftBrace = createConnectedPole(leftBraceFront, leftBraceBack, 0.08);
 swingGroup.add(leftBrace);
 
-const rightBrace = new THREE.Mesh(leftBraceGeometry, frameMaterial);
-rightBrace.position.set(frameSpread * 0.7, frameHeight * 0.3, 0);
-rightBrace.rotation.x = Math.PI / 2;
-rightBrace.castShadow = true;
+// Cross brace on right side
+const rightBraceFront = new THREE.Vector3().lerpVectors(rightFrontBase, rightApex, 0.35);
+const rightBraceBack = new THREE.Vector3().lerpVectors(rightBackBase, rightApex, 0.35);
+const rightBrace = createConnectedPole(rightBraceFront, rightBraceBack, 0.08);
 swingGroup.add(rightBrace);
 
-// Top bar connecting left and right A-frames
-const topBarLength = 2; // Distance between the two apex points
-const topBarGeometry = new THREE.CylinderGeometry(0.18, 0.18, topBarLength, 12);
-const topBar = new THREE.Mesh(topBarGeometry, frameMaterial);
-topBar.position.set(0, frameHeight, 0);
-topBar.rotation.z = Math.PI / 2;
-topBar.castShadow = true;
+// Top bar connecting left and right apex points
+const topBar = createConnectedPole(leftApex, rightApex, 0.18);
 swingGroup.add(topBar);
 
 // Add decorative caps at the apex points
 const capGeometry = new THREE.SphereGeometry(0.25, 16, 16);
 const leftCap = new THREE.Mesh(capGeometry, frameMaterial);
-leftCap.position.set(-0.5, frameHeight, 0);
+leftCap.position.copy(leftApex);
 leftCap.castShadow = true;
 swingGroup.add(leftCap);
 
 const rightCap = new THREE.Mesh(capGeometry, frameMaterial);
-rightCap.position.set(0.5, frameHeight, 0);
+rightCap.position.copy(rightApex);
 rightCap.castShadow = true;
 swingGroup.add(rightCap);
 
