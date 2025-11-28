@@ -371,7 +371,10 @@ scene.add(createCloud(4, 7, -10));
 scene.add(createCloud(0, 5.5, -12));
 
 // Hide loading indicator
-document.getElementById('loading').style.display = 'none';
+const loadingElement = document.getElementById('loading');
+if (loadingElement) {
+    loadingElement.style.display = 'none';
+}
 
 // Animation
 let swingAngle = 0;
