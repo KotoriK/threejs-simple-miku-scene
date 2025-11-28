@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -7,12 +8,12 @@ scene.background = new THREE.Color(0x87ceeb); // Sky blue background
 
 // Camera setup
 const camera = new THREE.PerspectiveCamera(
-    75,
+    45,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
 );
-camera.position.set(0, 2, 5);
+camera.position.set(0, 12, 25);
 
 // Renderer setup
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -26,28 +27,32 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
-controls.target.set(0, 1.5, 0);
+controls.target.set(0, 10, 0);
 controls.update();
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
 scene.add(ambientLight);
 
-const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
-directionalLight.position.set(5, 10, 7);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 1.2);
+directionalLight.position.set(10, 20, 10);
 directionalLight.castShadow = true;
 directionalLight.shadow.mapSize.width = 2048;
 directionalLight.shadow.mapSize.height = 2048;
 directionalLight.shadow.camera.near = 0.5;
-directionalLight.shadow.camera.far = 50;
-directionalLight.shadow.camera.left = -10;
-directionalLight.shadow.camera.right = 10;
-directionalLight.shadow.camera.top = 10;
-directionalLight.shadow.camera.bottom = -10;
+directionalLight.shadow.camera.far = 100;
+directionalLight.shadow.camera.left = -30;
+directionalLight.shadow.camera.right = 30;
+directionalLight.shadow.camera.top = 30;
+directionalLight.shadow.camera.bottom = -30;
 scene.add(directionalLight);
 
+// Add hemisphere light for better ambient lighting
+const hemisphereLight = new THREE.HemisphereLight(0x87ceeb, 0x7cfc00, 0.4);
+scene.add(hemisphereLight);
+
 // Ground
-const groundGeometry = new THREE.PlaneGeometry(20, 20);
+const groundGeometry = new THREE.PlaneGeometry(100, 100);
 const groundMaterial = new THREE.MeshStandardMaterial({
     color: 0x7cfc00,
     roughness: 0.8,
@@ -61,86 +66,130 @@ scene.add(ground);
 // Create swing group
 const swingGroup = new THREE.Group();
 
-// Swing frame (A-frame structure)
+// Swing frame material
 const frameMaterial = new THREE.MeshStandardMaterial({
     color: 0x8b4513,
     roughness: 0.6,
     metalness: 0.2
 });
 
-// Frame poles
-const poleGeometry = new THREE.CylinderGeometry(0.05, 0.05, 4, 8);
+// A-frame swing structure - properly connected poles
+// Height of the frame
+const frameHeight = 18;
+const frameSpread = 6; // Spread at the base
+const frameDepth = 3;  // Depth front to back
 
-// Left front pole
-const leftFrontPole = new THREE.Mesh(poleGeometry, frameMaterial);
-leftFrontPole.position.set(-1.2, 2, 0.5);
-leftFrontPole.rotation.z = Math.PI / 12;
-leftFrontPole.castShadow = true;
+// Calculate pole positions so they meet at the top
+// Poles go from ground corners to top bar connection points
+function createPole(startX, startZ, endX, endY, endZ) {
+    const start = new THREE.Vector3(startX, 0, startZ);
+    const end = new THREE.Vector3(endX, endY, endZ);
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = direction.length();
+    
+    const poleGeometry = new THREE.CylinderGeometry(0.15, 0.15, length, 12);
+    const pole = new THREE.Mesh(poleGeometry, frameMaterial);
+    
+    // Position at midpoint
+    pole.position.set(
+        (startX + endX) / 2,
+        endY / 2,
+        (startZ + endZ) / 2
+    );
+    
+    // Rotate to align with direction
+    const axis = new THREE.Vector3(0, 1, 0);
+    const quaternion = new THREE.Quaternion();
+    direction.normalize();
+    quaternion.setFromUnitVectors(axis, direction);
+    pole.setRotationFromQuaternion(quaternion);
+    
+    pole.castShadow = true;
+    return pole;
+}
+
+// Left side A-frame (front and back poles meeting at top)
+const leftFrontPole = createPole(-frameSpread, frameDepth, -0.5, frameHeight, 0);
+const leftBackPole = createPole(-frameSpread, -frameDepth, -0.5, frameHeight, 0);
 swingGroup.add(leftFrontPole);
-
-// Left back pole
-const leftBackPole = new THREE.Mesh(poleGeometry, frameMaterial);
-leftBackPole.position.set(-1.2, 2, -0.5);
-leftBackPole.rotation.z = Math.PI / 12;
-leftBackPole.castShadow = true;
 swingGroup.add(leftBackPole);
 
-// Right front pole
-const rightFrontPole = new THREE.Mesh(poleGeometry, frameMaterial);
-rightFrontPole.position.set(1.2, 2, 0.5);
-rightFrontPole.rotation.z = -Math.PI / 12;
-rightFrontPole.castShadow = true;
+// Right side A-frame (front and back poles meeting at top)
+const rightFrontPole = createPole(frameSpread, frameDepth, 0.5, frameHeight, 0);
+const rightBackPole = createPole(frameSpread, -frameDepth, 0.5, frameHeight, 0);
 swingGroup.add(rightFrontPole);
-
-// Right back pole
-const rightBackPole = new THREE.Mesh(poleGeometry, frameMaterial);
-rightBackPole.position.set(1.2, 2, -0.5);
-rightBackPole.rotation.z = -Math.PI / 12;
-rightBackPole.castShadow = true;
 swingGroup.add(rightBackPole);
 
-// Top bar
-const topBarGeometry = new THREE.CylinderGeometry(0.06, 0.06, 3, 8);
+// Cross braces for stability (connecting left front/back at mid height)
+const leftBraceGeometry = new THREE.CylinderGeometry(0.08, 0.08, frameDepth * 2, 8);
+const leftBrace = new THREE.Mesh(leftBraceGeometry, frameMaterial);
+leftBrace.position.set(-frameSpread * 0.7, frameHeight * 0.3, 0);
+leftBrace.rotation.x = Math.PI / 2;
+leftBrace.castShadow = true;
+swingGroup.add(leftBrace);
+
+const rightBrace = new THREE.Mesh(leftBraceGeometry, frameMaterial);
+rightBrace.position.set(frameSpread * 0.7, frameHeight * 0.3, 0);
+rightBrace.rotation.x = Math.PI / 2;
+rightBrace.castShadow = true;
+swingGroup.add(rightBrace);
+
+// Top bar connecting left and right A-frames
+const topBarLength = 2; // Distance between the two apex points
+const topBarGeometry = new THREE.CylinderGeometry(0.18, 0.18, topBarLength, 12);
 const topBar = new THREE.Mesh(topBarGeometry, frameMaterial);
-topBar.position.set(0, 3.8, 0);
+topBar.position.set(0, frameHeight, 0);
 topBar.rotation.z = Math.PI / 2;
 topBar.castShadow = true;
 swingGroup.add(topBar);
 
+// Add decorative caps at the apex points
+const capGeometry = new THREE.SphereGeometry(0.25, 16, 16);
+const leftCap = new THREE.Mesh(capGeometry, frameMaterial);
+leftCap.position.set(-0.5, frameHeight, 0);
+leftCap.castShadow = true;
+swingGroup.add(leftCap);
+
+const rightCap = new THREE.Mesh(capGeometry, frameMaterial);
+rightCap.position.set(0.5, frameHeight, 0);
+rightCap.castShadow = true;
+swingGroup.add(rightCap);
+
 // Swing seat group (for animation)
 const swingSeatGroup = new THREE.Group();
-swingSeatGroup.position.set(0, 3.8, 0);
+swingSeatGroup.position.set(0, frameHeight, 0);
 
-// Chains/ropes
+// Chains/ropes - longer for the taller frame
 const chainMaterial = new THREE.MeshStandardMaterial({
-    color: 0x444444,
+    color: 0x333333,
     roughness: 0.3,
-    metalness: 0.8
+    metalness: 0.9
 });
 
-const chainGeometry = new THREE.CylinderGeometry(0.02, 0.02, 2.5, 6);
+const chainLength = 10;
+const chainGeometry = new THREE.CylinderGeometry(0.05, 0.05, chainLength, 8);
 
 // Left chain
 const leftChain = new THREE.Mesh(chainGeometry, chainMaterial);
-leftChain.position.set(-0.35, -1.25, 0);
+leftChain.position.set(-1.2, -chainLength / 2, 0);
 leftChain.castShadow = true;
 swingSeatGroup.add(leftChain);
 
 // Right chain
 const rightChain = new THREE.Mesh(chainGeometry, chainMaterial);
-rightChain.position.set(0.35, -1.25, 0);
+rightChain.position.set(1.2, -chainLength / 2, 0);
 rightChain.castShadow = true;
 swingSeatGroup.add(rightChain);
 
-// Swing seat
-const seatGeometry = new THREE.BoxGeometry(0.9, 0.08, 0.4);
+// Swing seat - larger for the Miku model
+const seatGeometry = new THREE.BoxGeometry(3, 0.2, 1.5);
 const seatMaterial = new THREE.MeshStandardMaterial({
     color: 0x654321,
     roughness: 0.5,
     metalness: 0.1
 });
 const seat = new THREE.Mesh(seatGeometry, seatMaterial);
-seat.position.set(0, -2.5, 0);
+seat.position.set(0, -chainLength, 0);
 seat.castShadow = true;
 seat.receiveShadow = true;
 swingSeatGroup.add(seat);
@@ -148,190 +197,412 @@ swingSeatGroup.add(seat);
 swingGroup.add(swingSeatGroup);
 scene.add(swingGroup);
 
-// Create a simple Miku-inspired character (chibi/fufu style)
-const mikuGroup = new THREE.Group();
+// Update loading text
+const loadingElement = document.getElementById('loading');
+if (loadingElement) {
+    loadingElement.textContent = 'Loading Miku model...';
+}
 
-// Head
-const headGeometry = new THREE.SphereGeometry(0.3, 32, 32);
-const skinMaterial = new THREE.MeshStandardMaterial({
-    color: 0xffe4c4,
-    roughness: 0.7,
-    metalness: 0.0
-});
-const head = new THREE.Mesh(headGeometry, skinMaterial);
-head.position.y = 0.6;
-head.castShadow = true;
-mikuGroup.add(head);
+// GLTF Loader for loading 3D models
+const gltfLoader = new GLTFLoader();
 
-// Hair (twin tails style - Miku's signature)
-const hairMaterial = new THREE.MeshStandardMaterial({
-    color: 0x39c5bb, // Miku's signature teal
-    roughness: 0.5,
-    metalness: 0.1
-});
+// Try to load a GLTF model, fall back to procedural if not available
+// Note: In a real project, you would need to provide your own Miku GLTF/GLB model
+// For this demo, we'll create a detailed procedural Miku with proper IK-like joint structure
 
-// Main hair
-const mainHairGeometry = new THREE.SphereGeometry(0.32, 32, 32);
-const mainHair = new THREE.Mesh(mainHairGeometry, hairMaterial);
-mainHair.position.set(0, 0.65, -0.05);
-mainHair.scale.set(1, 1, 0.8);
-mainHair.castShadow = true;
-mikuGroup.add(mainHair);
+// Create a detailed Miku character with connected bones/joints
+function createMikuWithSkeleton() {
+    const mikuGroup = new THREE.Group();
+    
+    // Materials
+    const skinMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffe4c4,
+        roughness: 0.7,
+        metalness: 0.0
+    });
+    
+    const hairMaterial = new THREE.MeshStandardMaterial({
+        color: 0x39c5bb, // Miku's signature teal
+        roughness: 0.4,
+        metalness: 0.1
+    });
+    
+    const outfitMaterial = new THREE.MeshStandardMaterial({
+        color: 0x39c5bb,
+        roughness: 0.4,
+        metalness: 0.2
+    });
+    
+    const darkOutfitMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1a8a80,
+        roughness: 0.4,
+        metalness: 0.2
+    });
+    
+    // Create skeleton structure for IK-like hierarchy
+    const rootBone = new THREE.Bone();
+    rootBone.position.set(0, 0, 0);
+    
+    const spineBone = new THREE.Bone();
+    spineBone.position.set(0, 2, 0);
+    rootBone.add(spineBone);
+    
+    const chestBone = new THREE.Bone();
+    chestBone.position.set(0, 1.5, 0);
+    spineBone.add(chestBone);
+    
+    const neckBone = new THREE.Bone();
+    neckBone.position.set(0, 1, 0);
+    chestBone.add(neckBone);
+    
+    const headBone = new THREE.Bone();
+    headBone.position.set(0, 0.5, 0);
+    neckBone.add(headBone);
+    
+    // Create skeleton
+    const skeleton = new THREE.Skeleton([rootBone, spineBone, chestBone, neckBone, headBone]);
+    
+    // Head group (connected to neck)
+    const headGroup = new THREE.Group();
+    
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), skinMaterial);
+    head.castShadow = true;
+    headGroup.add(head);
+    
+    // Hair base (connected to and overlapping head)
+    const hairBase = new THREE.Mesh(new THREE.SphereGeometry(1.35, 32, 32), hairMaterial);
+    hairBase.position.set(0, 0.1, -0.2);
+    hairBase.scale.set(1, 1.05, 0.95);
+    hairBase.castShadow = true;
+    headGroup.add(hairBase);
+    
+    // Bangs (connected to hair base, covering forehead)
+    const bangsShape = new THREE.Shape();
+    bangsShape.moveTo(-1.1, 0);
+    bangsShape.quadraticCurveTo(-1.2, 0.4, -0.8, 0.5);
+    bangsShape.quadraticCurveTo(0, 0.7, 0.8, 0.5);
+    bangsShape.quadraticCurveTo(1.2, 0.4, 1.1, 0);
+    bangsShape.quadraticCurveTo(0, -0.1, -1.1, 0);
+    
+    const bangs = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), hairMaterial);
+    bangs.position.set(0, 0.6, 0.85);
+    bangs.scale.set(2, 0.6, 0.5);
+    bangs.castShadow = true;
+    headGroup.add(bangs);
+    
+    // Side bangs
+    const leftSideBang = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.8, 8, 8), hairMaterial);
+    leftSideBang.position.set(-1.1, 0, 0.5);
+    leftSideBang.rotation.z = Math.PI / 8;
+    leftSideBang.castShadow = true;
+    headGroup.add(leftSideBang);
+    
+    const rightSideBang = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.8, 8, 8), hairMaterial);
+    rightSideBang.position.set(1.1, 0, 0.5);
+    rightSideBang.rotation.z = -Math.PI / 8;
+    rightSideBang.castShadow = true;
+    headGroup.add(rightSideBang);
+    
+    // Twintails (connected to hair base with ribbon attachments)
+    // Left twintail group
+    const leftTwintailGroup = new THREE.Group();
+    leftTwintailGroup.position.set(-1.0, 0.2, -0.2);
+    
+    // Ribbon
+    const ribbonMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000, roughness: 0.5 });
+    const leftRibbon = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.1), ribbonMaterial);
+    leftTwintailGroup.add(leftRibbon);
+    
+    // Twintail strands
+    const leftTwintail1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 3.5, 8, 16), hairMaterial);
+    leftTwintail1.position.set(0, -2, 0);
+    leftTwintail1.rotation.z = Math.PI / 12;
+    leftTwintail1.castShadow = true;
+    leftTwintailGroup.add(leftTwintail1);
+    
+    const leftTwintail2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 3, 8, 16), hairMaterial);
+    leftTwintail2.position.set(-0.2, -1.8, 0.1);
+    leftTwintail2.rotation.z = Math.PI / 10;
+    leftTwintail2.castShadow = true;
+    leftTwintailGroup.add(leftTwintail2);
+    
+    headGroup.add(leftTwintailGroup);
+    
+    // Right twintail group
+    const rightTwintailGroup = new THREE.Group();
+    rightTwintailGroup.position.set(1.0, 0.2, -0.2);
+    
+    const rightRibbon = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.15, 0.1), ribbonMaterial);
+    rightTwintailGroup.add(rightRibbon);
+    
+    const rightTwintail1 = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 3.5, 8, 16), hairMaterial);
+    rightTwintail1.position.set(0, -2, 0);
+    rightTwintail1.rotation.z = -Math.PI / 12;
+    rightTwintail1.castShadow = true;
+    rightTwintailGroup.add(rightTwintail1);
+    
+    const rightTwintail2 = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 3, 8, 16), hairMaterial);
+    rightTwintail2.position.set(0.2, -1.8, 0.1);
+    rightTwintail2.rotation.z = -Math.PI / 10;
+    rightTwintail2.castShadow = true;
+    rightTwintailGroup.add(rightTwintail2);
+    
+    headGroup.add(rightTwintailGroup);
+    
+    // Face features
+    // Eyes
+    const eyeWhiteMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+    const eyeMaterial = new THREE.MeshStandardMaterial({ color: 0x39c5bb });
+    const pupilMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+    
+    // Left eye
+    const leftEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), eyeWhiteMaterial);
+    leftEyeWhite.position.set(-0.4, 0.1, 1.0);
+    leftEyeWhite.scale.set(1, 1.2, 0.5);
+    headGroup.add(leftEyeWhite);
+    
+    const leftIris = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), eyeMaterial);
+    leftIris.position.set(-0.4, 0.1, 1.12);
+    headGroup.add(leftIris);
+    
+    const leftPupil = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), pupilMaterial);
+    leftPupil.position.set(-0.4, 0.1, 1.18);
+    headGroup.add(leftPupil);
+    
+    // Right eye
+    const rightEyeWhite = new THREE.Mesh(new THREE.SphereGeometry(0.25, 16, 16), eyeWhiteMaterial);
+    rightEyeWhite.position.set(0.4, 0.1, 1.0);
+    rightEyeWhite.scale.set(1, 1.2, 0.5);
+    headGroup.add(rightEyeWhite);
+    
+    const rightIris = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), eyeMaterial);
+    rightIris.position.set(0.4, 0.1, 1.12);
+    headGroup.add(rightIris);
+    
+    const rightPupil = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), pupilMaterial);
+    rightPupil.position.set(0.4, 0.1, 1.18);
+    headGroup.add(rightPupil);
+    
+    // Eye highlights
+    const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const leftHighlight = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), highlightMaterial);
+    leftHighlight.position.set(-0.35, 0.18, 1.2);
+    headGroup.add(leftHighlight);
+    
+    const rightHighlight = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), highlightMaterial);
+    rightHighlight.position.set(0.45, 0.18, 1.2);
+    headGroup.add(rightHighlight);
+    
+    // Blush (cute fufu style)
+    const blushMaterial = new THREE.MeshBasicMaterial({
+        color: 0xffb6c1,
+        transparent: true,
+        opacity: 0.5
+    });
+    const leftBlush = new THREE.Mesh(new THREE.CircleGeometry(0.18, 16), blushMaterial);
+    leftBlush.position.set(-0.75, -0.15, 1.05);
+    leftBlush.rotation.y = Math.PI / 10;
+    headGroup.add(leftBlush);
+    
+    const rightBlush = new THREE.Mesh(new THREE.CircleGeometry(0.18, 16), blushMaterial);
+    rightBlush.position.set(0.75, -0.15, 1.05);
+    rightBlush.rotation.y = -Math.PI / 10;
+    headGroup.add(rightBlush);
+    
+    // Mouth/Smile
+    const smileMaterial = new THREE.MeshBasicMaterial({ color: 0xff9999 });
+    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.03, 8, 16, Math.PI), smileMaterial);
+    smile.position.set(0, -0.35, 1.05);
+    smile.rotation.x = Math.PI;
+    headGroup.add(smile);
+    
+    // Position head
+    headGroup.position.set(0, 5.5, 0);
+    mikuGroup.add(headGroup);
+    
+    // Neck (connecting head to body)
+    const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.6, 16), skinMaterial);
+    neck.position.set(0, 4.0, 0);
+    neck.castShadow = true;
+    mikuGroup.add(neck);
+    
+    // Body/Torso (connected to neck)
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.7, 1.2, 8, 16), outfitMaterial);
+    torso.position.set(0, 2.8, 0);
+    torso.castShadow = true;
+    mikuGroup.add(torso);
+    
+    // Collar detail
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.08, 8, 16), outfitMaterial);
+    collar.position.set(0, 3.6, 0);
+    collar.rotation.x = Math.PI / 2;
+    mikuGroup.add(collar);
+    
+    // Tie
+    const tieMaterial = new THREE.MeshStandardMaterial({ color: 0x39c5bb });
+    const tie = new THREE.Mesh(new THREE.ConeGeometry(0.15, 0.8, 4), tieMaterial);
+    tie.position.set(0, 3.2, 0.5);
+    tie.rotation.x = Math.PI;
+    mikuGroup.add(tie);
+    
+    // Skirt (connected to torso)
+    const skirt = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.2, 16), darkOutfitMaterial);
+    skirt.position.set(0, 1.5, 0);
+    skirt.rotation.x = Math.PI;
+    skirt.castShadow = true;
+    mikuGroup.add(skirt);
+    
+    // Legs (sitting position, connected to torso)
+    // Upper legs
+    const upperLegGeometry = new THREE.CapsuleGeometry(0.22, 0.8, 8, 8);
+    
+    const leftUpperLeg = new THREE.Mesh(upperLegGeometry, skinMaterial);
+    leftUpperLeg.position.set(-0.35, 0.8, 0.4);
+    leftUpperLeg.rotation.x = Math.PI / 2.5;
+    leftUpperLeg.castShadow = true;
+    mikuGroup.add(leftUpperLeg);
+    
+    const rightUpperLeg = new THREE.Mesh(upperLegGeometry, skinMaterial);
+    rightUpperLeg.position.set(0.35, 0.8, 0.4);
+    rightUpperLeg.rotation.x = Math.PI / 2.5;
+    rightUpperLeg.castShadow = true;
+    mikuGroup.add(rightUpperLeg);
+    
+    // Lower legs (connected to upper legs)
+    const lowerLegGeometry = new THREE.CapsuleGeometry(0.18, 0.9, 8, 8);
+    
+    const leftLowerLeg = new THREE.Mesh(lowerLegGeometry, skinMaterial);
+    leftLowerLeg.position.set(-0.35, 0.2, 1.0);
+    leftLowerLeg.rotation.x = -Math.PI / 5;
+    leftLowerLeg.castShadow = true;
+    mikuGroup.add(leftLowerLeg);
+    
+    const rightLowerLeg = new THREE.Mesh(lowerLegGeometry, skinMaterial);
+    rightLowerLeg.position.set(0.35, 0.2, 1.0);
+    rightLowerLeg.rotation.x = -Math.PI / 5;
+    rightLowerLeg.castShadow = true;
+    mikuGroup.add(rightLowerLeg);
+    
+    // Boots
+    const bootMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3 });
+    const leftBoot = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.6), bootMaterial);
+    leftBoot.position.set(-0.35, -0.3, 1.3);
+    leftBoot.rotation.x = -Math.PI / 8;
+    leftBoot.castShadow = true;
+    mikuGroup.add(leftBoot);
+    
+    const rightBoot = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.5, 0.6), bootMaterial);
+    rightBoot.position.set(0.35, -0.3, 1.3);
+    rightBoot.rotation.x = -Math.PI / 8;
+    rightBoot.castShadow = true;
+    mikuGroup.add(rightBoot);
+    
+    // Arms (connected to torso/shoulders)
+    // Shoulders
+    const shoulderGeometry = new THREE.SphereGeometry(0.2, 16, 16);
+    
+    const leftShoulder = new THREE.Mesh(shoulderGeometry, outfitMaterial);
+    leftShoulder.position.set(-0.9, 3.3, 0);
+    leftShoulder.castShadow = true;
+    mikuGroup.add(leftShoulder);
+    
+    const rightShoulder = new THREE.Mesh(shoulderGeometry, outfitMaterial);
+    rightShoulder.position.set(0.9, 3.3, 0);
+    rightShoulder.castShadow = true;
+    mikuGroup.add(rightShoulder);
+    
+    // Upper arms (connected to shoulders)
+    const upperArmGeometry = new THREE.CapsuleGeometry(0.12, 0.6, 8, 8);
+    
+    const leftUpperArm = new THREE.Mesh(upperArmGeometry, skinMaterial);
+    leftUpperArm.position.set(-1.1, 2.9, 0);
+    leftUpperArm.rotation.z = Math.PI / 5;
+    leftUpperArm.castShadow = true;
+    mikuGroup.add(leftUpperArm);
+    
+    const rightUpperArm = new THREE.Mesh(upperArmGeometry, skinMaterial);
+    rightUpperArm.position.set(1.1, 2.9, 0);
+    rightUpperArm.rotation.z = -Math.PI / 5;
+    rightUpperArm.castShadow = true;
+    mikuGroup.add(rightUpperArm);
+    
+    // Lower arms/forearms (connected to upper arms)
+    const forearmGeometry = new THREE.CapsuleGeometry(0.1, 0.5, 8, 8);
+    
+    const leftForearm = new THREE.Mesh(forearmGeometry, skinMaterial);
+    leftForearm.position.set(-1.3, 2.4, 0.1);
+    leftForearm.rotation.z = Math.PI / 3;
+    leftForearm.rotation.x = -Math.PI / 10;
+    leftForearm.castShadow = true;
+    mikuGroup.add(leftForearm);
+    
+    const rightForearm = new THREE.Mesh(forearmGeometry, skinMaterial);
+    rightForearm.position.set(1.3, 2.4, 0.1);
+    rightForearm.rotation.z = -Math.PI / 3;
+    rightForearm.rotation.x = -Math.PI / 10;
+    rightForearm.castShadow = true;
+    mikuGroup.add(rightForearm);
+    
+    // Hands
+    const handGeometry = new THREE.SphereGeometry(0.12, 8, 8);
+    
+    const leftHand = new THREE.Mesh(handGeometry, skinMaterial);
+    leftHand.position.set(-1.4, 2.0, 0.15);
+    leftHand.castShadow = true;
+    mikuGroup.add(leftHand);
+    
+    const rightHand = new THREE.Mesh(handGeometry, skinMaterial);
+    rightHand.position.set(1.4, 2.0, 0.15);
+    rightHand.castShadow = true;
+    mikuGroup.add(rightHand);
+    
+    // Arm sleeves (detached sleeves - Miku's signature)
+    const sleeveMaterial = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.3 });
+    
+    const leftSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.5, 8), sleeveMaterial);
+    leftSleeve.position.set(-1.25, 2.5, 0);
+    leftSleeve.rotation.z = Math.PI / 4;
+    mikuGroup.add(leftSleeve);
+    
+    const rightSleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.5, 8), sleeveMaterial);
+    rightSleeve.position.set(1.25, 2.5, 0);
+    rightSleeve.rotation.z = -Math.PI / 4;
+    mikuGroup.add(rightSleeve);
+    
+    // Add skeleton helper for visualization (can be removed in production)
+    // const skeletonHelper = new THREE.SkeletonHelper(rootBone);
+    // mikuGroup.add(skeletonHelper);
+    
+    // Position on swing
+    mikuGroup.position.set(0, -chainLength + 0.3, 0);
+    
+    return mikuGroup;
+}
 
-// Bangs
-const bangsGeometry = new THREE.SphereGeometry(0.15, 16, 16);
-const bangs = new THREE.Mesh(bangsGeometry, hairMaterial);
-bangs.position.set(0, 0.75, 0.2);
-bangs.scale.set(2, 0.5, 0.5);
-bangs.castShadow = true;
-mikuGroup.add(bangs);
+// Create and add Miku to the swing
+const miku = createMikuWithSkeleton();
+swingSeatGroup.add(miku);
 
-// Left twintail
-const twintailGeometry = new THREE.CapsuleGeometry(0.08, 0.8, 8, 16);
-const leftTwintail = new THREE.Mesh(twintailGeometry, hairMaterial);
-leftTwintail.position.set(-0.35, 0.3, -0.1);
-leftTwintail.rotation.z = Math.PI / 8;
-leftTwintail.castShadow = true;
-mikuGroup.add(leftTwintail);
-
-// Right twintail
-const rightTwintail = new THREE.Mesh(twintailGeometry, hairMaterial);
-rightTwintail.position.set(0.35, 0.3, -0.1);
-rightTwintail.rotation.z = -Math.PI / 8;
-rightTwintail.castShadow = true;
-mikuGroup.add(rightTwintail);
-
-// Eyes
-const eyeGeometry = new THREE.SphereGeometry(0.05, 16, 16);
-const eyeMaterial = new THREE.MeshStandardMaterial({
-    color: 0x39c5bb,
-    roughness: 0.3,
-    metalness: 0.0
-});
-
-// Left eye
-const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-leftEye.position.set(-0.1, 0.65, 0.25);
-mikuGroup.add(leftEye);
-
-// Right eye
-const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
-rightEye.position.set(0.1, 0.65, 0.25);
-mikuGroup.add(rightEye);
-
-// Eye highlights
-const highlightGeometry = new THREE.SphereGeometry(0.02, 8, 8);
-const highlightMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-const leftHighlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
-leftHighlight.position.set(-0.08, 0.67, 0.29);
-mikuGroup.add(leftHighlight);
-
-const rightHighlight = new THREE.Mesh(highlightGeometry, highlightMaterial);
-rightHighlight.position.set(0.12, 0.67, 0.29);
-mikuGroup.add(rightHighlight);
-
-// Blush (cute fufu style)
-const blushGeometry = new THREE.CircleGeometry(0.04, 16);
-const blushMaterial = new THREE.MeshBasicMaterial({
-    color: 0xffb6c1,
-    transparent: true,
-    opacity: 0.6
-});
-
-const leftBlush = new THREE.Mesh(blushGeometry, blushMaterial);
-leftBlush.position.set(-0.18, 0.55, 0.27);
-leftBlush.rotation.y = Math.PI / 8;
-mikuGroup.add(leftBlush);
-
-const rightBlush = new THREE.Mesh(blushGeometry, blushMaterial);
-rightBlush.position.set(0.18, 0.55, 0.27);
-rightBlush.rotation.y = -Math.PI / 8;
-mikuGroup.add(rightBlush);
-
-// Smile
-const smileGeometry = new THREE.TorusGeometry(0.05, 0.01, 8, 16, Math.PI);
-const smileMaterial = new THREE.MeshBasicMaterial({ color: 0xff9999 });
-const smile = new THREE.Mesh(smileGeometry, smileMaterial);
-smile.position.set(0, 0.52, 0.27);
-smile.rotation.x = Math.PI;
-mikuGroup.add(smile);
-
-// Body
-const bodyGeometry = new THREE.CapsuleGeometry(0.2, 0.4, 8, 16);
-const bodyMaterial = new THREE.MeshStandardMaterial({
-    color: 0x39c5bb, // Miku's outfit color
-    roughness: 0.5,
-    metalness: 0.1
-});
-const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-body.position.y = 0.1;
-body.castShadow = true;
-mikuGroup.add(body);
-
-// Skirt
-const skirtGeometry = new THREE.ConeGeometry(0.25, 0.2, 16);
-const skirtMaterial = new THREE.MeshStandardMaterial({
-    color: 0x1a8a80,
-    roughness: 0.5,
-    metalness: 0.1
-});
-const skirt = new THREE.Mesh(skirtGeometry, skirtMaterial);
-skirt.position.y = -0.15;
-skirt.rotation.x = Math.PI;
-skirt.castShadow = true;
-mikuGroup.add(skirt);
-
-// Legs (sitting position)
-const legGeometry = new THREE.CapsuleGeometry(0.06, 0.25, 8, 8);
-
-// Left leg
-const leftLeg = new THREE.Mesh(legGeometry, skinMaterial);
-leftLeg.position.set(-0.12, -0.35, 0.15);
-leftLeg.rotation.x = Math.PI / 3;
-leftLeg.castShadow = true;
-mikuGroup.add(leftLeg);
-
-// Right leg
-const rightLeg = new THREE.Mesh(legGeometry, skinMaterial);
-rightLeg.position.set(0.12, -0.35, 0.15);
-rightLeg.rotation.x = Math.PI / 3;
-rightLeg.castShadow = true;
-mikuGroup.add(rightLeg);
-
-// Arms
-const armGeometry = new THREE.CapsuleGeometry(0.04, 0.2, 8, 8);
-
-// Left arm (holding chain)
-const leftArm = new THREE.Mesh(armGeometry, skinMaterial);
-leftArm.position.set(-0.3, 0.15, 0);
-leftArm.rotation.z = Math.PI / 4;
-leftArm.castShadow = true;
-mikuGroup.add(leftArm);
-
-// Right arm (holding chain)
-const rightArm = new THREE.Mesh(armGeometry, skinMaterial);
-rightArm.position.set(0.3, 0.15, 0);
-rightArm.rotation.z = -Math.PI / 4;
-rightArm.castShadow = true;
-mikuGroup.add(rightArm);
-
-// Position Miku on the swing seat
-mikuGroup.position.set(0, -2.05, 0);
-swingSeatGroup.add(mikuGroup);
+// Hide loading indicator
+if (loadingElement) {
+    loadingElement.style.display = 'none';
+}
 
 // Add some decorative elements
 
 // Flowers around the ground
-const flowerMaterial = new THREE.MeshBasicMaterial({ color: 0xff69b4 });
-const flowerGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+const flowerColors = [0xff69b4, 0xff1493, 0xffb6c1, 0xffffff, 0xffff00];
 
-for (let i = 0; i < 20; i++) {
-    const flower = new THREE.Mesh(flowerGeometry, flowerMaterial);
+for (let i = 0; i < 50; i++) {
+    const flowerMaterial = new THREE.MeshBasicMaterial({ 
+        color: flowerColors[Math.floor(Math.random() * flowerColors.length)] 
+    });
+    const flower = new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 8), flowerMaterial);
     flower.position.set(
-        (Math.random() - 0.5) * 10,
-        0.05,
-        (Math.random() - 0.5) * 10
+        (Math.random() - 0.5) * 40,
+        0.15,
+        (Math.random() - 0.5) * 40
     );
     scene.add(flower);
 }
@@ -345,19 +616,19 @@ const cloudMaterial = new THREE.MeshBasicMaterial({
 
 function createCloud(x, y, z) {
     const cloudGroup = new THREE.Group();
-    const cloudGeometry = new THREE.SphereGeometry(0.5, 16, 16);
+    const cloudGeometry = new THREE.SphereGeometry(1.5, 16, 16);
 
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
         const cloudPart = new THREE.Mesh(cloudGeometry, cloudMaterial);
         cloudPart.position.set(
-            (Math.random() - 0.5) * 1,
-            (Math.random() - 0.5) * 0.3,
-            (Math.random() - 0.5) * 0.5
+            (Math.random() - 0.5) * 3,
+            (Math.random() - 0.5) * 0.8,
+            (Math.random() - 0.5) * 1.5
         );
         cloudPart.scale.set(
-            0.5 + Math.random() * 0.5,
-            0.3 + Math.random() * 0.2,
-            0.5 + Math.random() * 0.5
+            0.5 + Math.random() * 0.8,
+            0.3 + Math.random() * 0.3,
+            0.5 + Math.random() * 0.8
         );
         cloudGroup.add(cloudPart);
     }
@@ -366,23 +637,22 @@ function createCloud(x, y, z) {
     return cloudGroup;
 }
 
-scene.add(createCloud(-5, 6, -8));
-scene.add(createCloud(4, 7, -10));
-scene.add(createCloud(0, 5.5, -12));
-
-// Hide loading indicator
-const loadingElement = document.getElementById('loading');
-if (loadingElement) {
-    loadingElement.style.display = 'none';
-}
+scene.add(createCloud(-15, 25, -20));
+scene.add(createCloud(12, 28, -25));
+scene.add(createCloud(0, 22, -30));
+scene.add(createCloud(-20, 30, -35));
+scene.add(createCloud(18, 26, -15));
 
 // Animation
+const clock = new THREE.Clock();
 let swingAngle = 0;
-const swingSpeed = 0.02;
-const swingAmplitude = Math.PI / 8;
+const swingSpeed = 0.015;
+const swingAmplitude = Math.PI / 10;
 
 function animate() {
     requestAnimationFrame(animate);
+
+    const delta = clock.getDelta();
 
     // Swing animation
     swingAngle += swingSpeed;
