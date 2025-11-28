@@ -570,10 +570,6 @@ function createMikuWithSkeleton() {
     rightSleeve.rotation.z = -Math.PI / 4;
     mikuGroup.add(rightSleeve);
     
-    // Add skeleton helper for visualization (can be removed in production)
-    // const skeletonHelper = new THREE.SkeletonHelper(rootBone);
-    // mikuGroup.add(skeletonHelper);
-    
     // Position on swing
     mikuGroup.position.set(0, -chainLength + 0.3, 0);
     
@@ -644,15 +640,12 @@ scene.add(createCloud(-20, 30, -35));
 scene.add(createCloud(18, 26, -15));
 
 // Animation
-const clock = new THREE.Clock();
 let swingAngle = 0;
 const swingSpeed = 0.015;
 const swingAmplitude = Math.PI / 10;
 
 function animate() {
     requestAnimationFrame(animate);
-
-    const delta = clock.getDelta();
 
     // Swing animation
     swingAngle += swingSpeed;
